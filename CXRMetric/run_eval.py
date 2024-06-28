@@ -31,7 +31,7 @@ COLS = ["radgraph_combined", "bertscore", "semb_score", "bleu_score"]
 cache_path = "cache/"
 pred_embed_path = os.path.join(cache_path, "pred_embeddings.pt")
 gt_embed_path = os.path.join(cache_path, "gt_embeddings.pt")
-weights = {"bigram": (1/2., 1/2.)}
+weights = {"bigram": (1 / 2.0, 1 / 2.0)}
 composite_metric_col_v0 = "RadCliQ-v0"
 composite_metric_col_v1 = "RadCliQ-v1"
 
@@ -43,6 +43,7 @@ class CompositeMetric:
         scaler: Input normalizer.
         coefs: Coefficients including the intercept.
     """
+
     def __init__(self, scaler, coefs):
         """Initializes the composite metric with a normalizer and coefficients.
 
@@ -63,17 +64,22 @@ class CompositeMetric:
             Composite metric score.
         """
         norm_x = self.scaler.transform(x)
-        norm_x = np.concatenate(
-            (norm_x, np.ones((norm_x.shape[0], 1))), axis=1)
+        norm_x = np.concatenate((norm_x, np.ones((norm_x.shape[0], 1))), axis=1)
         pred = norm_x @ self.coefs
         return pred
 
 
 def prep_reports(reports):
     """Preprocesses reports"""
-    return [list(filter(
-        lambda val: val !=  "", str(elem)\
-            .lower().replace(".", " .").split(" "))) for elem in reports]
+    return [
+        list(
+            filter(
+                lambda val: val != "", str(elem).lower().replace(".", " .").split(" ")
+            )
+        )
+        for elem in reports
+    ]
+
 
 def add_bleu_col(gt_df, pred_df):
     """Computes BLEU-2 and adds scores as a column to prediction df."""
@@ -81,23 +87,26 @@ def add_bleu_col(gt_df, pred_df):
     for i, row in gt_df.iterrows():
         gt_report = prep_reports([row[REPORT_COL_NAME]])[0]
         pred_row = pred_df[pred_df[STUDY_ID_COL_NAME] == row[STUDY_ID_COL_NAME]]
-        predicted_report = \
-            prep_reports([pred_row[REPORT_COL_NAME].values[0]])[0]
+        predicted_report = prep_reports([pred_row[REPORT_COL_NAME].values[0]])[0]
         if len(pred_row) == 1:
-            bleu = BLEU([gt_report], weights)
-            score = bleu.get_score([predicted_report])["bigram"]
+            # TODO BLEUを直す(gn64)
+            # bleu = BLEU([gt_report], weights)
+            # score = bleu.get_score([predicted_report])["bigram"]
+            score = [-1]
             assert len(score) == 1
             _index = pred_df.index[
-                pred_df[STUDY_ID_COL_NAME]==row[STUDY_ID_COL_NAME]].tolist()[0]
+                pred_df[STUDY_ID_COL_NAME] == row[STUDY_ID_COL_NAME]
+            ].tolist()[0]
             pred_df.at[_index, "bleu_score"] = score[0]
     return pred_df
+
 
 def add_bertscore_col(gt_df, pred_df, use_idf):
     """Computes BERTScore and adds scores as a column to prediction df."""
     test_reports = gt_df[REPORT_COL_NAME].tolist()
-    test_reports = [re.sub(r' +', ' ', test) for test in test_reports]
+    test_reports = [re.sub(r" +", " ", test) for test in test_reports]
     method_reports = pred_df[REPORT_COL_NAME].tolist()
-    method_reports = [re.sub(r' +', ' ', report) for report in method_reports]
+    method_reports = [re.sub(r" +", " ", report) for report in method_reports]
 
     scorer = BERTScorer(
         model_type="distilroberta-base",
@@ -105,10 +114,12 @@ def add_bertscore_col(gt_df, pred_df, use_idf):
         lang="en",
         rescale_with_baseline=True,
         idf=use_idf,
-        idf_sents=test_reports)
+        idf_sents=test_reports,
+    )
     _, _, f1 = scorer.score(method_reports, test_reports)
     pred_df["bertscore"] = f1
     return pred_df
+
 
 def add_semb_col(pred_df, semb_path, gt_path):
     """Computes s_emb and adds scores as a column to prediction df."""
@@ -124,10 +135,12 @@ def add_semb_col(pred_df, semb_path, gt_path):
     scores = []
     for i, (label, pred) in enumerate(zip(np_label_embeds, np_pred_embeds)):
         sim_scores = (label * pred).sum() / (
-            np.linalg.norm(label) * np.linalg.norm(pred))
+            np.linalg.norm(label) * np.linalg.norm(pred)
+        )
         scores.append(sim_scores)
     pred_df["semb_score"] = scores
     return pred_df
+
 
 def add_radgraph_col(pred_df, entities_path, relations_path):
     """Computes RadGraph F1 and adds scores as a column to prediction df."""
@@ -154,18 +167,23 @@ def add_radgraph_col(pred_df, entities_path, relations_path):
     pred_df["radgraph_combined"] = radgraph_scores
     return pred_df
 
-def calc_metric(gt_csv, pred_csv, out_csv, use_idf): # TODO: support single metrics at a time
+
+def calc_metric(
+    gt_csv, pred_csv, out_csv, use_idf
+):  # TODO: support single metrics at a time
     """Computes four metrics and composite metric scores."""
     os.environ["MKL_THREADING_LAYER"] = "GNU"
 
     cache_gt_csv = os.path.join(
-        os.path.dirname(gt_csv), f"cache_{os.path.basename(gt_csv)}")
+        os.path.dirname(gt_csv), f"cache_{os.path.basename(gt_csv)}"
+    )
     cache_pred_csv = os.path.join(
-        os.path.dirname(pred_csv), f"cache_{os.path.basename(pred_csv)}")
-    gt = pd.read_csv(gt_csv)\
-        .sort_values(by=[STUDY_ID_COL_NAME]).reset_index(drop=True)
-    pred = pd.read_csv(pred_csv)\
-        .sort_values(by=[STUDY_ID_COL_NAME]).reset_index(drop=True)
+        os.path.dirname(pred_csv), f"cache_{os.path.basename(pred_csv)}"
+    )
+    gt = pd.read_csv(gt_csv).sort_values(by=[STUDY_ID_COL_NAME]).reset_index(drop=True)
+    pred = (
+        pd.read_csv(pred_csv).sort_values(by=[STUDY_ID_COL_NAME]).reset_index(drop=True)
+    )
 
     # Keep intersection of study IDs
     gt_study_ids = set(gt[STUDY_ID_COL_NAME])
@@ -181,7 +199,7 @@ def calc_metric(gt_csv, pred_csv, out_csv, use_idf): # TODO: support single metr
     # check that length and study IDs are the same
     assert len(gt) == len(pred)
     assert (REPORT_COL_NAME in gt.columns) and (REPORT_COL_NAME in pred.columns)
-    assert (gt[STUDY_ID_COL_NAME].equals(pred[STUDY_ID_COL_NAME]))
+    assert gt[STUDY_ID_COL_NAME].equals(pred[STUDY_ID_COL_NAME])
 
     # add blue column to the eval df
     pred = add_bleu_col(gt, pred)
@@ -191,15 +209,25 @@ def calc_metric(gt_csv, pred_csv, out_csv, use_idf): # TODO: support single metr
 
     # run encode.py to make the semb column
     os.system(f"mkdir -p {cache_path}")
-    os.system(f"python CXRMetric/CheXbert/src/encode.py -c {CHEXBERT_PATH} -d {cache_pred_csv} -o {pred_embed_path}")
-    os.system(f"python CXRMetric/CheXbert/src/encode.py -c {CHEXBERT_PATH} -d {cache_gt_csv} -o {gt_embed_path}")
+    os.system(
+        f"python CXRMetric/CheXbert/src/encode.py -c {CHEXBERT_PATH} -d {cache_pred_csv} -o {pred_embed_path}"
+    )
+    os.system(
+        f"python CXRMetric/CheXbert/src/encode.py -c {CHEXBERT_PATH} -d {cache_gt_csv} -o {gt_embed_path}"
+    )
     pred = add_semb_col(pred, pred_embed_path, gt_embed_path)
 
     # run radgraph to create that column
     entities_path = os.path.join(cache_path, "entities_cache.json")
     relations_path = os.path.join(cache_path, "relations_cache.json")
-    run_radgraph(cache_gt_csv, cache_pred_csv, cache_path, RADGRAPH_PATH,
-                 entities_path, relations_path)
+    run_radgraph(
+        cache_gt_csv,
+        cache_pred_csv,
+        cache_path,
+        RADGRAPH_PATH,
+        entities_path,
+        relations_path,
+    )
     pred = add_radgraph_col(pred, entities_path, relations_path)
 
     # compute composite metric: RadCliQ-v0

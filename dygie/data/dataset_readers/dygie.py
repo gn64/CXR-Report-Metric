@@ -8,8 +8,15 @@ from overrides import overrides
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import (ListField, TextField, SpanField, MetadataField,
-                                  SequenceLabelField, AdjacencyField, LabelField)
+from allennlp.data.fields import (
+    ListField,
+    TextField,
+    SpanField,
+    MetadataField,
+    SequenceLabelField,
+    AdjacencyField,
+    LabelField,
+)
 from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Token
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
@@ -31,10 +38,13 @@ class DyGIEReader(DatasetReader):
     Reads a single JSON-formatted file. This is the same file format as used in the
     scierc, but is preprocessed
     """
-    def __init__(self,
-                 max_span_width: int,
-                 token_indexers: Dict[str, TokenIndexer] = None,
-                 **kwargs) -> None:
+
+    def __init__(
+        self,
+        max_span_width: int,
+        token_indexers: Dict[str, TokenIndexer] = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self._max_span_width = max_span_width
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
@@ -116,11 +126,15 @@ class DyGIEReader(DatasetReader):
     def _process_sentence(self, sent: Sentence, dataset: str):
         # Get the sentence text and define the `text_field`.
         sentence_text = [self._normalize_word(word) for word in sent.text]
-        text_field = TextField([Token(word) for word in sentence_text], self._token_indexers)
+        text_field = TextField(
+            [Token(word) for word in sentence_text], self._token_indexers
+        )
 
         # Enumerate spans.
         spans = []
-        for start, end in enumerate_spans(sentence_text, max_span_width=self._max_span_width):
+        for start, end in enumerate_spans(
+            sentence_text, max_span_width=self._max_span_width
+        ):
             spans.append(SpanField(start, end, text_field))
         span_field = ListField(spans)
         span_tuples = [(span.span_start, span.span_end) for span in spans]
@@ -137,39 +151,62 @@ class DyGIEReader(DatasetReader):
         if sent.ner is not None:
             ner_labels = self._process_ner(span_tuples, sent)
             fields["ner_labels"] = ListField(
-                [LabelField(entry, label_namespace=f"{dataset}__ner_labels")
-                 for entry in ner_labels])
+                [
+                    LabelField(entry, label_namespace=f"{dataset}__ner_labels")
+                    for entry in ner_labels
+                ]
+            )
         if sent.cluster_dict is not None:
             # Skip indexing for coref labels, which are ints.
             coref_labels = self._process_coref(span_tuples, sent)
             fields["coref_labels"] = ListField(
-                [LabelField(entry, label_namespace="coref_labels", skip_indexing=True)
-                 for entry in coref_labels])
+                [
+                    LabelField(
+                        entry, label_namespace="coref_labels", skip_indexing=True
+                    )
+                    for entry in coref_labels
+                ]
+            )
         if sent.relations is not None:
-            relation_labels, relation_indices = self._process_relations(span_tuples, sent)
+            relation_labels, relation_indices = self._process_relations(
+                span_tuples, sent
+            )
             fields["relation_labels"] = AdjacencyField(
-                indices=relation_indices, sequence_field=span_field, labels=relation_labels,
-                label_namespace=f"{dataset}__relation_labels")
+                indices=relation_indices,
+                sequence_field=span_field,
+                labels=relation_labels,
+                label_namespace=f"{dataset}__relation_labels",
+            )
         if sent.events is not None:
-            trigger_labels, argument_labels, argument_indices = self._process_events(span_tuples, sent)
+            trigger_labels, argument_labels, argument_indices = self._process_events(
+                span_tuples, sent
+            )
             fields["trigger_labels"] = SequenceLabelField(
-                trigger_labels, text_field, label_namespace=f"{dataset}__trigger_labels")
+                trigger_labels, text_field, label_namespace=f"{dataset}__trigger_labels"
+            )
             fields["argument_labels"] = AdjacencyFieldAssym(
-                indices=argument_indices, row_field=text_field, col_field=span_field,
-                labels=argument_labels, label_namespace=f"{dataset}__argument_labels")
+                indices=argument_indices,
+                row_field=text_field,
+                col_field=span_field,
+                labels=argument_labels,
+                label_namespace=f"{dataset}__argument_labels",
+            )
 
         return fields
 
     def _process_sentence_fields(self, doc: Document):
         # Process each sentence.
-        sentence_fields = [self._process_sentence(sent, doc.dataset) for sent in doc.sentences]
+        sentence_fields = [
+            self._process_sentence(sent, doc.dataset) for sent in doc.sentences
+        ]
 
         # Make sure that all sentences have the same set of keys.
         first_keys = set(sentence_fields[0].keys())
         for entry in sentence_fields:
             if set(entry.keys()) != first_keys:
                 raise DyGIEDataException(
-                    f"Keys do not match across sentences for document {doc.doc_key}.")
+                    f"Keys do not match across sentences for document {doc.doc_key}."
+                )
 
         # For each field, store the data from all sentences together in a ListField.
         fields = {}
@@ -190,8 +227,10 @@ class DyGIEReader(DatasetReader):
         # Make sure there are no single-token sentences; these break things.
         sent_lengths = [len(x) for x in doc.sentences]
         if min(sent_lengths) < 2:
-            msg = (f"Document {doc.doc_key} has a sentence with a single token or no tokens. "
-                   "This may break the modeling code.")
+            msg = (
+                f"Document {doc.doc_key} has a sentence with a single token or no tokens. "
+                "This may break the modeling code."
+            )
             warnings.warn(msg)
 
         fields = self._process_sentence_fields(doc)
@@ -199,6 +238,7 @@ class DyGIEReader(DatasetReader):
 
         return Instance(fields)
 
+    # TODO 直す
     @overrides
     def _instances_from_cache_file(self, cache_filename):
         with open(cache_filename, "rb") as f:
