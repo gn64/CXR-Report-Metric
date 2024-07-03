@@ -7,7 +7,7 @@ import pickle
 import torch
 
 from bert_score import BERTScorer
-from fast_bleu import BLEU
+from nltk.translate.bleu_score import SmoothingFunction, sentence_bleu
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import MinMaxScaler
 
@@ -89,10 +89,16 @@ def add_bleu_col(gt_df, pred_df):
         pred_row = pred_df[pred_df[STUDY_ID_COL_NAME] == row[STUDY_ID_COL_NAME]]
         predicted_report = prep_reports([pred_row[REPORT_COL_NAME].values[0]])[0]
         if len(pred_row) == 1:
-            # TODO BLEUを直す(gn64)
-            # bleu = BLEU([gt_report], weights)
-            # score = bleu.get_score([predicted_report])["bigram"]
-            score = [-1]
+            smoothie = SmoothingFunction().method1
+            score = [
+                sentence_bleu(
+                    [gt_report],
+                    predicted_report,
+                    weights=(1 / 2.0, 1 / 2.0),
+                    smoothing_function=smoothie,
+                )
+            ]
+            print(f"BLEU-2 score: {score[0]}")
             assert len(score) == 1
             _index = pred_df.index[
                 pred_df[STUDY_ID_COL_NAME] == row[STUDY_ID_COL_NAME]
